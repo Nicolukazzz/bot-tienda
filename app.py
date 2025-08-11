@@ -3,6 +3,7 @@ import os
 import requests
 from dotenv import load_dotenv
 from datetime import datetime
+import hashlib
 
 # Configuración inicial
 load_dotenv()
@@ -21,7 +22,10 @@ ESTADOS = {
     "PROCESAR_PEDIDO": 2,
     "CONFIRMAR": 3,
     "DATOS_CLIENTE": 4,
-    "FINALIZADO": 5
+    "FINALIZADO": 5,
+    "PROMOCIONES": 6,
+    "ASESOR": 7,
+    "SEGUIMIENTO": 8
 }
 
 # Comandos globales
@@ -33,6 +37,23 @@ COMANDOS_GLOBALES = {
 
 # Base de datos temporal
 sesiones = {}
+
+# Precios de productos
+PRECIOS = {
+    "A12": {"nombre": "Esmalte Rojo Pasión", "precio": 15},
+    "B05": {"nombre": "Esmalte Azul Noche", "precio": 18},
+    "C18": {"nombre": "Esmalte Verde Esmeralda", "precio": 20},
+    "D22": {"nombre": "Esmalte Rosa Chic", "precio": 16},
+    "E07": {"nombre": "Esmalte Negro Elegante", "precio": 17},
+    "F15": {"nombre": "Esmalte Dorado Brillante", "precio": 19}
+}
+
+# Promociones
+PROMOCIONES = [
+    "🎉 2x1 en todos los esmaltes los martes",
+    "💅 Combo 3 esmaltes por $45 (Ahorra $10)",
+    "🛍️ Envío gratis en compras mayores a $50"
+]
 
 @app.route("/webhook", methods=["GET"])
 def verificar_webhook():
@@ -82,6 +103,12 @@ def recibir_mensajes():
                 manejar_confirmar(numero, texto)
             elif estado_actual == ESTADOS["DATOS_CLIENTE"]:
                 manejar_datos_cliente(numero, texto)
+            elif estado_actual == ESTADOS["PROMOCIONES"]:
+                manejar_promociones(numero, texto)
+            elif estado_actual == ESTADOS["ASESOR"]:
+                manejar_asesor(numero, texto)
+            elif estado_actual == ESTADOS["SEGUIMIENTO"]:
+                manejar_seguimiento(numero, texto)
                 
         return jsonify({"status": "success"}), 200
 
@@ -107,43 +134,56 @@ def manejar_comando_global(numero, comando):
 
 # --- Flujo principal ---
 def manejar_inicio(numero, texto):
-    mensaje = (
-        "💅 *Bienvenida a Nails Color* 💅\n\n"
-        "Elige una opción:\n\n"
-        "1️⃣ Ver catálogo y hacer pedido\n"
-        "2️⃣ Consultar promociones\n"
-        "3️⃣ Hablar con asesor\n"
-        "4️⃣ Seguir mi pedido\n\n"
-        "ℹ️ Escribe *ayuda* en cualquier momento para ver opciones."
-    )
-    sesiones[numero] = {"estado": ESTADOS["INICIO"]}
-    enviar_respuesta(numero, mensaje)
+    if texto == "1":
+        sesiones[numero] = {"estado": ESTADOS["CATALOGO"]}
+        manejar_catalogo(numero, texto)
+    elif texto == "2":
+        sesiones[numero] = {"estado": ESTADOS["PROMOCIONES"]}
+        manejar_promociones(numero, texto)
+    elif texto == "3":
+        sesiones[numero] = {"estado": ESTADOS["ASESOR"]}
+        manejar_asesor(numero, texto)
+    elif texto == "4":
+        sesiones[numero] = {"estado": ESTADOS["SEGUIMIENTO"]}
+        manejar_seguimiento(numero, texto)
+    else:
+        mensaje = (
+            "💅 *Bienvenida a Nails Color* 💅\n\n"
+            "Elige una opción:\n\n"
+            "1️⃣ Ver catálogo y hacer pedido\n"
+            "2️⃣ Consultar promociones\n"
+            "3️⃣ Hablar con asesor\n"
+            "4️⃣ Seguir mi pedido\n\n"
+            "ℹ️ Escribe *ayuda* en cualquier momento para ver opciones."
+        )
+        sesiones[numero] = {"estado": ESTADOS["INICIO"]}
+        enviar_respuesta(numero, mensaje)
 
 def manejar_catalogo(numero, texto):
-    if texto == "1":
-        # Enviar catálogo visual (PDF/imagen)
-        mensaje = (
-            "🎨 *Catálogo de Esmaltes* 🎨\n\n"
-            "🔍 Visualiza nuestros productos aquí:\n"
-            "https://drive.google.com/catalogo.pdf\n\n"
-            "📝 *Para pedir usa el formato:*\n"
-            "*[Código] [Cantidad]*\n"
-            "Ejemplo:\n"
-            "A12 2\n"
-            "B05 1\n\n"
-            "Cuando termines escribe *'Listo'*\n"
-            "ℹ️ Comandos: *menu*, *cancelar*, *ayuda*"
-        )
-        sesiones[numero] = {
-            "estado": ESTADOS["PROCESAR_PEDIDO"],
-            "pedido": {}
-        }
-        enviar_respuesta(numero, mensaje)
-        
-        # Opcional: Enviar imagen de muestra
-        # enviar_imagen(numero, "https://ejemplo.com/muestra.jpg")
-    else:
-        manejar_inicio(numero, texto)
+    # Mostrar catálogo directamente
+    mensaje = (
+        "🎨 *Catálogo de Esmaltes* 🎨\n\n"
+        "🔍 Visualiza nuestros productos aquí:\n"
+        "https://drive.google.com/catalogo.pdf\n\n"
+        "📝 *Para pedir usa el formato:*\n"
+        "*[Código] [Cantidad]*\n"
+        "Ejemplo:\n"
+        "A12 2\n"
+        "B05 1\n\n"
+        "Cuando termines escribe *'Listo'*\n"
+        "ℹ️ Comandos: *menu*, *cancelar*, *ayuda*"
+    )
+    
+    # Mostrar lista de productos disponibles
+    mensaje += "\n\n📦 *Productos disponibles:*\n"
+    for codigo, producto in PRECIOS.items():
+        mensaje += f"• {codigo}: {producto['nombre']} - ${producto['precio']}\n"
+    
+    sesiones[numero] = {
+        "estado": ESTADOS["PROCESAR_PEDIDO"],
+        "pedido": {}
+    }
+    enviar_respuesta(numero, mensaje)
 
 def manejar_procesar_pedido(numero, texto):
     if texto.lower() == "listo":
@@ -176,17 +216,17 @@ def manejar_procesar_pedido(numero, texto):
             if cantidad <= 0:
                 raise ValueError
             
-            precio = obtener_precio(codigo)
-            if not precio:
+            if codigo not in PRECIOS:
                 enviar_respuesta(numero, f"⚠️ Código {codigo} no válido. Verifica el catálogo.")
                 return
             
             sesiones[numero]["pedido"][codigo] = {
+                "nombre": PRECIOS[codigo]["nombre"],
                 "cantidad": cantidad,
-                "precio": precio
+                "precio": PRECIOS[codigo]["precio"]
             }
             
-            enviar_respuesta(numero, f"✅ Añadido: {codigo} x {cantidad}\nContinúa o escribe *Listo*")
+            enviar_respuesta(numero, f"✅ Añadido: {PRECIOS[codigo]['nombre']} x {cantidad}\nContinúa o escribe *Listo*")
             
         except ValueError:
             enviar_respuesta(numero, "⚠️ Formato incorrecto. Usa: *[Código] [Cantidad]* o escribe *ayuda*")
@@ -230,15 +270,26 @@ def manejar_datos_cliente(numero, texto):
                 "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
+            # Generar número de pedido único
+            pedido_hash = hashlib.md5(str(sesiones[numero]).encode()).hexdigest()[:8].upper()
+            
             # Generar confirmación
             pedido = sesiones[numero]
             resumen = (
                 "✅ *¡Pedido Confirmado!* ✅\n\n"
-                f"📋 *N° Pedido:* {hash(str(pedido))}\n"
+                f"📋 *N° Pedido:* {pedido_hash}\n"
                 f"👤 *Cliente:* {pedido['cliente']['nombre']}\n"
                 f"📞 *Contacto:* {pedido['cliente']['telefono']}\n"
-                f"💳 *Pago:* {pedido['cliente']['pago']}\n"
-                f"💲 *Total:* ${pedido['total']}\n\n"
+                f"📍 *Dirección:* {pedido['cliente']['direccion']}\n"
+                f"💳 *Pago:* {pedido['cliente']['pago']}\n\n"
+                "🛍️ *Detalles del pedido:*\n"
+            )
+            
+            for codigo, item in pedido["pedido"].items():
+                resumen += f"• {item['nombre']}: {item['cantidad']} x ${item['precio']} = ${item['cantidad'] * item['precio']}\n"
+            
+            resumen += (
+                f"\n💲 *Total:* ${pedido['total']}\n\n"
                 "📬 Recibirás los detalles de pago por este medio.\n"
                 "¡Gracias por tu compra! 💖\n\n"
                 "Escribe *menu* para volver al inicio."
@@ -247,7 +298,7 @@ def manejar_datos_cliente(numero, texto):
             enviar_respuesta(numero, resumen)
             
             # Guardar en base de datos (implementar)
-            guardar_pedido(pedido)
+            guardar_pedido(pedido, pedido_hash)
             
             sesiones[numero]["estado"] = ESTADOS["FINALIZADO"]
         else:
@@ -256,18 +307,41 @@ def manejar_datos_cliente(numero, texto):
         print(f"Error procesando datos: {str(e)}")
         enviar_respuesta(numero, "⚠️ Error al procesar. Por favor envía los datos nuevamente.")
 
-# --- Funciones auxiliares ---
-def obtener_precio(codigo):
-    """Simulación - reemplazar con DB real"""
-    precios = {
-        "A12": 15, "B05": 18, "C18": 20,
-        "D22": 16, "E07": 17, "F15": 19
-    }
-    return precios.get(codigo.upper())
+# --- Funciones para otras opciones del menú ---
+def manejar_promociones(numero, texto):
+    mensaje = "🎁 *Promociones Actuales* 🎁\n\n"
+    for promo in PROMOCIONES:
+        mensaje += f"• {promo}\n"
+    
+    mensaje += "\n1️⃣ Volver al menú\n2️⃣ Hacer pedido"
+    sesiones[numero]["estado"] = ESTADOS["PROMOCIONES"]
+    enviar_respuesta(numero, mensaje)
 
-def guardar_pedido(pedido):
+def manejar_asesor(numero, texto):
+    mensaje = (
+        "👩‍💼 *Asesoría Personalizada*\n\n"
+        "Un asesor se pondrá en contacto contigo en breve.\n"
+        "Mientras tanto, ¿deseas dejar algún mensaje específico?\n\n"
+        "1️⃣ Volver al menú\n"
+        "2️⃣ No, esperaré al asesor"
+    )
+    sesiones[numero]["estado"] = ESTADOS["ASESOR"]
+    enviar_respuesta(numero, mensaje)
+
+def manejar_seguimiento(numero, texto):
+    mensaje = (
+        "📦 *Seguimiento de Pedido*\n\n"
+        "Por favor ingresa tu número de pedido:\n"
+        "(Ejemplo: ABC123)\n\n"
+        "ℹ️ Escribe *menu* para volver al inicio"
+    )
+    sesiones[numero]["estado"] = ESTADOS["SEGUIMIENTO"]
+    enviar_respuesta(numero, mensaje)
+
+# --- Funciones auxiliares ---
+def guardar_pedido(pedido, numero_pedido):
     """Guardar en base de datos (implementar)"""
-    print(f"📦 Pedido para guardar en DB: {pedido}")
+    print(f"📦 Pedido guardado - N° {numero_pedido}: {pedido}")
 
 def enviar_respuesta(numero, mensaje):
     url = f"https://graph.facebook.com/{API_VERSION}/{PHONE_NUMBER_ID}/messages"
@@ -281,7 +355,11 @@ def enviar_respuesta(numero, mensaje):
         "type": "text",
         "text": {"body": mensaje}
     }
-    requests.post(url, headers=headers, json=payload)
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        print(f"📤 Respuesta enviada a {numero}: {response.status_code}")
+    except Exception as e:
+        print(f"❌ Error enviando mensaje: {str(e)}")
 
 def enviar_imagen(numero, url):
     """Para enviar imágenes del catálogo"""
