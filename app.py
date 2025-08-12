@@ -13,7 +13,7 @@ app = Flask(__name__)
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
-API_VERSION = "v19.0"
+API_VERSION = "v22.0"
 
 # Estados del flujo
 ESTADOS = {
